@@ -1,0 +1,11 @@
+.venv
+.git
+.env
+downloads
+__pycache__
+*.py[cod]
+.pytest_cache
+.pip-cache
+tests
+*.log
+cookies.txt

@@ -1,0 +1,9 @@
+services:
+  bot:
+    build: .
+    image: soundcloud-telegram-bot:latest
+    container_name: soundcloud-bot
+    env_file:
+      - .env
+    restart: unless-stopped
+    init: true
