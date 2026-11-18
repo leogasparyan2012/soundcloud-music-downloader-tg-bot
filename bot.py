@@ -1,5 +1,5 @@
 """Точка входа: запуск Telegram-бота в режиме long polling."""
-
+#ffff
 from __future__ import annotations
 
 import asyncio
