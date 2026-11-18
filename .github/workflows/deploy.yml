@@ -1,30 +1,32 @@
-name: Stop and Deploy to Render
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  stop-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 1. Suspend Render Service
-        run: |
-          curl -f -X POST "https://render.com{{ secrets.RENDER_SERVICE_ID }}/suspend" \
-          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}"
-
-      - name: 2. Wait for process to stop
-        run: sleep 15
-
-      - name: 3. Resume Render Service
-        run: |
-          curl -f -X POST "https://render.com{{ secrets.RENDER_SERVICE_ID }}/resume" \
-          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}"
-
-      - name: 4. Trigger New Deploy
-        run: |
-          curl -f -X POST "https://render.com{{ secrets.RENDER_SERVICE_ID }}/deploys" \
-          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
-          -H "Content-Type: application/json" \
-          -d '{"clearCache": "do_not_clear", "commitId": "${{ github.sha }}"}'
+cd /home/leo/Документы/deepseek/soundcloud-music-downloader-tg-bot/
+printf '%s\n' \
+'name: Stop and Deploy to Render' \
+'' \
+'on:' \
+'  push:' \
+'    branches:' \
+'      - main' \
+'' \
+'jobs:' \
+'  stop-and-deploy:' \
+'    runs-on: ubuntu-latest' \
+'    steps:' \
+'      - name: 1. Suspend Render Service' \
+'        run: |' \
+'          curl -f -X POST "https://render.com{{ secrets.RENDER_SERVICE_ID }}/suspend" \' \
+'          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}"' \
+'' \
+'      - name: 2. Wait for process to stop' \
+'        run: sleep 15' \
+'' \
+'      - name: 3. Resume Render Service' \
+'        run: |' \
+'          curl -f -X POST "https://render.com{{ secrets.RENDER_SERVICE_ID }}/resume" \' \
+'          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}"' \
+'' \
+'      - name: 4. Trigger New Deploy' \
+'        run: |' \
+'          curl -f -X POST "https://render.com{{ secrets.RENDER_SERVICE_ID }}/deploys" \' \
+'          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \' \
+'          -H "Content-Type: application/json" \' \
+'          -d '\''{"clearCache": "do_not_clear", "commitId": "${{ github.sha }}"}'\''' > .github/workflows/deploy.yml
