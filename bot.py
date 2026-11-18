@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import shutil
 import sys
 from collections import defaultdict
 
+from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -53,6 +55,15 @@ def _register_error_handler(dp: Dispatcher) -> None:
         return True
 
 
+async def _start_dummy_server() -> web.AppRunner:
+    app = web.Application()
+    app.router.add_get("/", lambda _: web.Response(text="OK"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    await web.TCPSite(runner, "0.0.0.0", int(os.environ.get("PORT", 10000))).start()
+    return runner
+
+
 async def main() -> None:
     settings = load_settings()
     _setup_logging(settings)
@@ -90,6 +101,8 @@ async def main() -> None:
     dp.include_router(router)
     _register_error_handler(dp)
 
+    web_runner = await _start_dummy_server()
+
     try:
         await bot.set_my_commands(
             [
@@ -106,6 +119,7 @@ async def main() -> None:
     except TelegramAPIError as exc:
         raise SystemExit(f"Не удалось подключиться к Telegram: {exc}") from exc
     finally:
+        await web_runner.cleanup()
         await bot.session.close()
 
 
