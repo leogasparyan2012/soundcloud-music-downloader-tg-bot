@@ -1,7 +1,4 @@
-cd /home/leo/Документы/deepseek/soundcloud-music-downloader-tg-bot/
-
-python -c '
-content = """name: Stop and Deploy to Render
+name: Stop and Deploy to Render
 
 on:
   push:
@@ -14,7 +11,7 @@ jobs:
     steps:
       - name: 1. Suspend Render Service
         run: |
-          curl -f -X POST "https://render.com{{ secrets.RENDER_SERVICE_ID }}/suspend" \\
+          curl -f -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/suspend" \
           -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}"
 
       - name: 2. Wait for process to stop
@@ -22,16 +19,12 @@ jobs:
 
       - name: 3. Resume Render Service
         run: |
-          curl -f -X POST "https://render.com{{ secrets.RENDER_SERVICE_ID }}/resume" \\
+          curl -f -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/resume" \
           -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}"
 
       - name: 4. Trigger New Deploy
         run: |
-          curl -f -X POST "https://render.com{{ secrets.RENDER_SERVICE_ID }}/deploys" \\
-          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \\
-          -H "Content-Type: application/json" \\
-          -d '\''{"clearCache": "do_not_clear", "commitId": "${{ github.sha }}"}'\''
-"""
-with open(".github/workflows/deploy.yml", "w") as f:
-    f.write(content)
-'
+          curl -f -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+          -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+          -H "Content-Type: application/json" \
+          -d '"{\"clearCache\": \"do_not_clear\", \"commitId\": \"${{ github.sha }}\"}''
