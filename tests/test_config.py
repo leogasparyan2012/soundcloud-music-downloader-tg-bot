@@ -36,7 +36,7 @@ def test_defaults(clean_env: None, monkeypatch: pytest.MonkeyPatch, tmp_path) ->
 
     assert settings.audio_quality == "320"
     assert settings.max_file_mb == 50
-    assert settings.max_playlist_items == 10
+    assert settings.max_playlist_items == 500
     assert settings.max_concurrent_downloads == 2
     assert settings.download_dir == tmp_path / "dl"
     assert settings.cookies_file is None
@@ -66,6 +66,19 @@ def test_invalid_max_file_mb(clean_env: None, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("BOT_TOKEN", "123456789:AAHtest-token")
     monkeypatch.setenv("MAX_FILE_MB", "0")
     with pytest.raises(config.ConfigError, match="MAX_FILE_MB"):
+        config.load_settings()
+
+
+def test_max_playlist_items_accepts_500(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BOT_TOKEN", "123456789:AAHtest-token")
+    monkeypatch.setenv("MAX_PLAYLIST_ITEMS", "500")
+    assert config.load_settings().max_playlist_items == 500
+
+
+def test_max_playlist_items_rejects_more_than_500(clean_env: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BOT_TOKEN", "123456789:AAHtest-token")
+    monkeypatch.setenv("MAX_PLAYLIST_ITEMS", "501")
+    with pytest.raises(config.ConfigError, match="MAX_PLAYLIST_ITEMS"):
         config.load_settings()
 
 

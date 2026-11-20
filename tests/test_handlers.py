@@ -11,7 +11,7 @@ import pytest
 from soundcloud_bot import handlers as handlers_module
 from soundcloud_bot.config import Settings
 from soundcloud_bot.downloader import DownloadError, Media, ProbeResult, TrackMeta
-from soundcloud_bot.handlers import on_text
+from soundcloud_bot.handlers import DownloadRegistry, on_text
 
 
 def make_settings(tmp_path: Path, **overrides) -> Settings:
@@ -91,7 +91,7 @@ class FakeDownloader:
             raise self._probe
         return self._probe
 
-    async def download(self, track: TrackMeta, workdir: Path, on_progress=None) -> Media:
+    async def download(self, track: TrackMeta, workdir: Path, on_progress=None, on_metadata=None) -> Media:
         if on_progress:
             on_progress(0.5, 5, 10, 1000)
         path = Path(workdir) / "track.mp3"
@@ -102,6 +102,17 @@ class FakeDownloader:
             thumbnail_path=None,
             filesize=self._filesize or path.stat().st_size,
         )
+
+
+class FailingDownloader(FakeDownloader):
+    """Скачивание всегда падает — для проверки текста ошибки."""
+
+    def __init__(self, probe: ProbeResult, error: str) -> None:
+        super().__init__(probe)
+        self._error = error
+
+    async def download(self, track: TrackMeta, workdir: Path, on_progress=None, on_metadata=None) -> Media:
+        raise DownloadError(self._error)
 
 
 @pytest.fixture(autouse=True)
@@ -122,7 +133,7 @@ def test_single_track(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     bot = FakeBot()
     downloader = FakeDownloader(ProbeResult("Song", False, (track(),), 1))
 
-    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock)))
+    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock), DownloadRegistry()))
 
     assert len(bot.audio_calls) == 1
     call = bot.audio_calls[0]
@@ -143,7 +154,7 @@ def test_playlist_is_capped(tmp_path: Path) -> None:
     tracks = (track("One"), track("Two"), track("Three"))
     downloader = FakeDownloader(ProbeResult("Mix", True, tracks, 3))
 
-    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock)))
+    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock), DownloadRegistry()))
 
     assert [call["title"] for call in bot.audio_calls] == ["One", "Two"]
     status = message.statuses[0]
@@ -157,7 +168,7 @@ def test_probe_error_is_shown(tmp_path: Path) -> None:
     bot = FakeBot()
     downloader = FakeDownloader(DownloadError("Трек приватный или требует входа в аккаунт."))
 
-    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock)))
+    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock), DownloadRegistry()))
 
     assert bot.audio_calls == []
     assert "❌" in message.statuses[0].history[-1]
@@ -173,10 +184,39 @@ def test_too_large_file_is_not_sent(tmp_path: Path) -> None:
         filesize=5 * 1024 * 1024,
     )
 
-    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock)))
+    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock), DownloadRegistry()))
 
     assert bot.audio_calls == []
     assert any("Telegram принимает" in reply for reply in message.replies)
+
+
+def test_download_error_without_title_shows_position_and_link(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path, max_playlist_items=500)
+    message = FakeMessage("https://soundcloud.com/artist/sets/mix")
+    bot = FakeBot()
+    broken = TrackMeta(url="https://soundcloud.com/artist/broken", title="", performer="")
+    probe = ProbeResult("Mix", True, (broken, track("Two")), 2)
+    downloader = FailingDownloader(
+        probe, "Трек защищён DRM — SoundCloud не отдаёт его для скачивания."
+    )
+
+    run(
+        on_text(
+            message,
+            bot,
+            settings,
+            downloader,
+            defaultdict(asyncio.Lock),
+            DownloadRegistry(),
+        )
+    )
+
+    warnings = [reply for reply in message.replies if reply.startswith("⚠️")]
+    assert len(warnings) == 2
+    assert "Трек 1 из 2" in warnings[0]
+    assert "DRM" in warnings[0]
+    assert 'href="https://soundcloud.com/artist/broken"' in warnings[0]
+    assert "Трек без названия" not in warnings[0]
 
 
 def test_foreign_link_gets_hint(tmp_path: Path) -> None:
@@ -185,7 +225,7 @@ def test_foreign_link_gets_hint(tmp_path: Path) -> None:
     bot = FakeBot()
     downloader = FakeDownloader(ProbeResult("x", False, (track(),), 1))
 
-    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock)))
+    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock), DownloadRegistry()))
 
     assert bot.audio_calls == []
     assert "не похоже на ссылку SoundCloud" in message.replies[0]
@@ -201,7 +241,7 @@ def test_second_download_while_first_runs_is_rejected(tmp_path: Path) -> None:
     run(lock.acquire())
 
     try:
-        run(on_text(message, bot, settings, downloader, locks))
+        run(on_text(message, bot, settings, downloader, locks, DownloadRegistry()))
     finally:
         lock.release()
 
@@ -215,6 +255,6 @@ def test_group_chat_ignores_non_soundcloud_text(tmp_path: Path) -> None:
     bot = FakeBot()
     downloader = FakeDownloader(ProbeResult("x", False, (track(),), 1))
 
-    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock)))
+    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock), DownloadRegistry()))
 
     assert message.replies == []

@@ -16,7 +16,7 @@ from aiogram.types import Chat, Message, Update, User
 
 from soundcloud_bot.config import Settings
 from soundcloud_bot.downloader import Media, ProbeResult, TrackMeta
-from soundcloud_bot.handlers import build_router
+from soundcloud_bot.handlers import DownloadRegistry, build_router
 
 TOKEN = "123456789:" + "A" * 35
 
@@ -65,7 +65,7 @@ class FakeDownloader:
             total=1,
         )
 
-    async def download(self, track: TrackMeta, workdir: Path, on_progress=None) -> Media:
+    async def download(self, track: TrackMeta, workdir: Path, on_progress=None, on_metadata=None) -> Media:
         await asyncio.sleep(0.01)
         if on_progress:
             on_progress(0.5, 5, 10, 1000)
@@ -107,6 +107,7 @@ def test_full_update_flow(tmp_path: Path) -> None:
         dp["settings"] = settings
         dp["downloader"] = FakeDownloader()
         dp["user_locks"] = defaultdict(asyncio.Lock)
+        dp["stops"] = DownloadRegistry()
         dp.include_router(build_router())
 
         message = Message(
@@ -134,7 +135,7 @@ def test_full_update_flow(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
-@pytest.mark.parametrize("text", ["/start", "/help", "/unknown"])
+@pytest.mark.parametrize("text", ["/start", "/help", "/stop", "/unknown"])
 def test_commands_do_not_crash(tmp_path: Path, text: str) -> None:
     async def scenario() -> None:
         session = FakeSession()
@@ -143,6 +144,7 @@ def test_commands_do_not_crash(tmp_path: Path, text: str) -> None:
         dp["settings"] = make_settings(tmp_path)
         dp["downloader"] = FakeDownloader()
         dp["user_locks"] = defaultdict(asyncio.Lock)
+        dp["stops"] = DownloadRegistry()
         dp.include_router(build_router())
 
         message = Message(

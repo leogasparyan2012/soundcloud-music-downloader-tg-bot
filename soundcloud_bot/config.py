@@ -98,7 +98,7 @@ def load_settings() -> Settings:
         download_dir=_path_env("DOWNLOAD_DIR", BASE_DIR / "downloads") or BASE_DIR / "downloads",
         audio_quality=quality,
         max_file_mb=_int_env("MAX_FILE_MB", 50, minimum=1, maximum=2000),
-        max_playlist_items=_int_env("MAX_PLAYLIST_ITEMS", 10, minimum=1, maximum=50),
+        max_playlist_items=_int_env("MAX_PLAYLIST_ITEMS", 500, minimum=1, maximum=500),
         max_concurrent_downloads=_int_env("MAX_CONCURRENT_DOWNLOADS", 2, minimum=1, maximum=10),
         download_timeout=_int_env("DOWNLOAD_TIMEOUT", 900, minimum=30, maximum=3600),
         cookies_file=cookies_file,

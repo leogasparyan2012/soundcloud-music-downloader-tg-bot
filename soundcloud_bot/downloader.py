@@ -31,6 +31,8 @@ PLACEHOLDER_TITLES = {"[deleted track]", "[private track]", "[deleted]", "delete
 
 # Колбэк прогресса: (доля 0..1, скачано байт, всего байт, скорость байт/с).
 ProgressCallback = Callable[[float, int, int, float | None], None]
+# Колбэк метаданных: вызывается, когда yt-dlp уже знает настоящие название/исполнителя.
+MetadataCallback = Callable[["TrackMeta"], None]
 
 
 class DownloadError(RuntimeError):
@@ -124,10 +126,11 @@ class SoundCloudDownloader:
         track: TrackMeta,
         dest_dir: Path,
         on_progress: ProgressCallback | None = None,
+        on_metadata: MetadataCallback | None = None,
     ) -> Media:
         """Скачивает трек в MP3, вшивает обложку и теги."""
         async with self._semaphore:
-            return await self._run(self._download_sync, track, dest_dir, on_progress)
+            return await self._run(self._download_sync, track, dest_dir, on_progress, on_metadata)
 
     # ------------------------------------------------------------- служебное
 
@@ -241,9 +244,14 @@ class SoundCloudDownloader:
         track: TrackMeta,
         dest_dir: Path,
         on_progress: ProgressCallback | None,
+        on_metadata: MetadataCallback | None = None,
     ) -> Media:
         dest_dir.mkdir(parents=True, exist_ok=True)
-        hook = self._make_hook(on_progress) if on_progress else None
+        hook = (
+            self._make_hook(on_progress, on_metadata)
+            if on_progress or on_metadata
+            else None
+        )
         opts = self._common_opts() | {
             "format": "bestaudio/best",
             "outtmpl": str(dest_dir / "source.%(ext)s"),
@@ -308,9 +316,22 @@ class SoundCloudDownloader:
             return None
 
     @staticmethod
-    def _make_hook(on_progress: ProgressCallback) -> Callable[[dict], None]:
+    def _make_hook(
+        on_progress: ProgressCallback | None,
+        on_metadata: MetadataCallback | None = None,
+    ) -> Callable[[dict], None]:
+        metadata_sent = False
+
         def hook(data: dict) -> None:
+            nonlocal metadata_sent
             try:
+                info = data.get("info_dict") or {}
+                # Название в плейлисте из flat-режима бывает пустым — берём настоящее.
+                if on_metadata and not metadata_sent and (info.get("track") or info.get("title")):
+                    metadata_sent = True
+                    on_metadata(SoundCloudDownloader._info_to_track(info))
+                if on_progress is None:
+                    return
                 status = data.get("status")
                 if status == "downloading":
                     total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
@@ -424,6 +445,11 @@ class SoundCloudDownloader:
         raw = clean_error(exc)
         lowered = raw.lower()
 
+        if "drm" in lowered:
+            return (
+                "Трек защищён DRM — SoundCloud не отдаёт его для скачивания. "
+                "Такой трек скачать нельзя, пропускаю."
+            )
         if "ffmpeg" in lowered and ("not found" in lowered or "not installed" in lowered):
             return "На сервере не установлен ffmpeg — без него бот не соберёт MP3."
         if any(marker in lowered for marker in ("private", "sign in", "login required", "authentication")):

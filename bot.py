@@ -21,7 +21,7 @@ from aiogram.utils.token import TokenValidationError
 
 from soundcloud_bot.config import ConfigError, Settings, load_settings
 from soundcloud_bot.downloader import SoundCloudDownloader, cleanup_old_workdirs
-from soundcloud_bot.handlers import router
+from soundcloud_bot.handlers import DownloadRegistry, router
 
 log = logging.getLogger(__name__)
 
@@ -98,6 +98,7 @@ async def main() -> None:
     dp["settings"] = settings
     dp["downloader"] = SoundCloudDownloader(settings)
     dp["user_locks"] = defaultdict(asyncio.Lock)
+    dp["stops"] = DownloadRegistry()
     dp.include_router(router)
     _register_error_handler(dp)
 
@@ -108,6 +109,7 @@ async def main() -> None:
             [
                 BotCommand(command="start", description="Приветствие"),
                 BotCommand(command="help", description="Как пользоваться"),
+                BotCommand(command="stop", description="Остановить загрузку плейлиста"),
             ]
         )
         await bot.delete_webhook(drop_pending_updates=False)
