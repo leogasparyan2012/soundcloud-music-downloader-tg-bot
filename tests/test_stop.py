@@ -263,6 +263,22 @@ def test_progress_text_marks_pending_stop() -> None:
     assert "Останавливаю после этого трека" in text
 
 
+def test_progress_text_has_no_size_or_speed() -> None:
+    state: dict[str, float | int | None] = {
+        "fraction": 0.5,
+        "done": 512_000,
+        "total": 1_024_000,
+        "speed": 123_456,
+    }
+
+    text = handlers_module._progress_text(track(), state, 1, 2, True)
+
+    assert "50%" in text
+    assert "МБ" not in text
+    assert "КБ" not in text
+    assert "/с" not in text
+
+
 def test_progress_text_hides_unknown_title() -> None:
     state: dict[str, float | int | None] = {"fraction": 0.0, "done": 0, "total": 0, "speed": None}
     unknown = TrackMeta(url="https://soundcloud.com/artist/song", title="", performer="Forss")

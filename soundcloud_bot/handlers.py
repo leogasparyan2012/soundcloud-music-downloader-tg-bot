@@ -10,6 +10,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import DefaultDict
+from urllib.parse import urlparse
 
 from aiogram import Bot, F, Router
 from aiogram.enums import ChatAction, ChatType
@@ -18,8 +19,8 @@ from aiogram.filters import Command
 from aiogram.types import FSInputFile, Message
 
 from .config import Settings
-from .downloader import DownloadError, Media, SoundCloudDownloader, TrackMeta, new_workdir
-from .utils import extract_soundcloud_url, human_size, human_speed, progress_bar
+from .downloader import DownloadError, Media, ProbeResult, SoundCloudDownloader, TrackMeta, new_workdir
+from .utils import extract_soundcloud_url, human_size, progress_bar
 
 log = logging.getLogger(__name__)
 
@@ -87,10 +88,36 @@ def _track_error_text(track: TrackMeta, details: str, index: int, total: int) ->
     return text
 
 
+# Подписи для плейлистов и релизов SoundCloud (set_type из API).
+COLLECTION_LABELS = {
+    "album": ("💿", "Альбом"),
+    "ep": ("💿", "EP"),
+    "single": ("💿", "Сингл"),
+    "compilation": ("💿", "Сборник"),
+    "playlist": ("🎧", "Плейлист"),
+}
+# Сегменты URL, которые означают профиль/подборку, а не отдельный трек.
+_PROFILE_PATHS = {"tracks", "albums", "sets", "reposts", "likes", "spotlight", "comments"}
+
+
+def _probing_text(url: str) -> str:
+    """Текст статуса, пока yt-dlp ещё определяет, что скачивать."""
+    parts = [part for part in urlparse(url).path.split("/") if part]
+    if any(part in ("sets", "albums") for part in parts):
+        return "🔎 Получаю информацию о плейлисте или альбоме…"
+    if len(parts) == 2 and parts[1] not in _PROFILE_PATHS:
+        return "🔎 Получаю информацию о треке…"
+    return "🔎 Получаю информацию…"
+
+
+def _collection_label(probe: ProbeResult) -> tuple[str, str]:
+    return COLLECTION_LABELS.get(probe.kind, ("🎧", "Плейлист"))
+
+
 def _start_text(settings: Settings) -> str:
     return (
         "🎧 <b>Привет! Я скачиваю музыку из SoundCloud.</b>\n\n"
-        "Пришли ссылку на трек или плейлист — верну MP3 с обложкой и тегами.\n\n"
+        "Пришли ссылку на трек, плейлист или альбом — верну MP3 с обложкой и тегами.\n\n"
         "<b>Подходящие ссылки</b>\n"
         "<code>https://soundcloud.com/artist/track</code>\n"
         "<code>https://on.soundcloud.com/XXXXXX</code>\n\n"
@@ -244,11 +271,12 @@ async def _download_tracks(
     settings: Settings,
     session: ActiveDownload,
 ) -> None:
+    probing = _probing_text(url)
     try:
-        status = await message.reply("🔎 Получаю информацию о треке…")
+        status = await message.reply(probing)
     except TelegramBadRequest:
         # Исходное сообщение могли удалить — тогда просто пишем в чат.
-        status = await message.answer("🔎 Получаю информацию о треке…")
+        status = await message.answer(probing)
     try:
         probe = await downloader.probe(url)
     except DownloadError as exc:
@@ -268,11 +296,18 @@ async def _download_tracks(
         note = ""
         if probe.total > len(tracks):
             note = f"\nСкачаю первые <b>{len(tracks)}</b> из {probe.total}."
+        emoji, kind = _collection_label(probe)
         await _safe_edit(
             status,
-            f"🎧 Плейлист <b>{_h(probe.title)}</b>\n"
+            f"{emoji} {kind} <b>{_h(probe.title)}</b>\n"
             f"Треков к загрузке: <b>{len(tracks)}</b>.{note}",
         )
+    else:
+        track = probe.tracks[0]
+        heading = f"🎵 <b>{_h(track.title or probe.title)}</b>"
+        if track.performer:
+            heading += f"\n<i>{_h(track.performer)}</i>"
+        await _safe_edit(status, heading)
 
     sent = 0
     failed = 0
@@ -460,13 +495,8 @@ def _progress_text(
 
     fraction = float(state["fraction"] or 0.0)
     bar = progress_bar(fraction)
-    total_bytes = int(state["total"] or 0)
-    done_bytes = int(state["done"] or 0)
-    if total_bytes:
-        details = f"\n{bar} {fraction * 100:.0f}%\n{human_size(done_bytes)} из {human_size(total_bytes)}"
-        speed = human_speed(state["speed"])  # type: ignore[arg-type]
-        if speed:
-            details += f" • {speed}"
+    if int(state["total"] or 0):
+        details = f"\n{bar} {fraction * 100:.0f}%"
     else:
         details = f"\n{bar} 0%\n⏳ Скачиваю…"
     if stop_event is not None and stop_event.is_set():

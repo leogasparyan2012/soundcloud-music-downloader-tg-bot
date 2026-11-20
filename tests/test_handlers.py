@@ -162,6 +162,54 @@ def test_playlist_is_capped(tmp_path: Path) -> None:
     assert "Готово: 2 из 2" in status.history[-1]
 
 
+def test_single_track_heading(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    message = FakeMessage("https://soundcloud.com/artist/song")
+    bot = FakeBot()
+    downloader = FakeDownloader(ProbeResult("Song", False, (track(),), 1))
+
+    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock), DownloadRegistry()))
+
+    assert any("🎵 <b>Song</b>" in text for text in message.statuses[0].history)
+
+
+def test_playlist_heading(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    message = FakeMessage("https://soundcloud.com/artist/sets/mix")
+    bot = FakeBot()
+    downloader = FakeDownloader(ProbeResult("Mix", True, (track("One"),), 1))
+
+    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock), DownloadRegistry()))
+
+    assert any("🎧 Плейлист <b>Mix</b>" in text for text in message.statuses[0].history)
+
+
+def test_album_heading(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    message = FakeMessage("https://soundcloud.com/artist/sets/album")
+    bot = FakeBot()
+    downloader = FakeDownloader(
+        ProbeResult("My Album", True, (track("One"),), 1, album_type="album")
+    )
+
+    run(on_text(message, bot, settings, downloader, defaultdict(asyncio.Lock), DownloadRegistry()))
+
+    assert any("💿 Альбом <b>My Album</b>" in text for text in message.statuses[0].history)
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://soundcloud.com/artist/track", "🔎 Получаю информацию о треке…"),
+        ("https://soundcloud.com/artist/sets/mix", "🔎 Получаю информацию о плейлисте или альбоме…"),
+        ("https://soundcloud.com/artist/likes", "🔎 Получаю информацию…"),
+        ("https://on.soundcloud.com/abc", "🔎 Получаю информацию…"),
+    ],
+)
+def test_probing_text_matches_url_type(url: str, expected: str) -> None:
+    assert handlers_module._probing_text(url) == expected
+
+
 def test_probe_error_is_shown(tmp_path: Path) -> None:
     settings = make_settings(tmp_path)
     message = FakeMessage("https://soundcloud.com/artist/private")

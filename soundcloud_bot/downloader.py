@@ -53,6 +53,15 @@ class ProbeResult:
     is_playlist: bool
     tracks: tuple[TrackMeta, ...]
     total: int
+    # SoundCloud set_type: "album", "ep", "single", "playlist" или None.
+    album_type: str | None = None
+
+    @property
+    def kind(self) -> str:
+        """Что перед нами: track, playlist, album, ep, single или compilation."""
+        if not self.is_playlist:
+            return "track"
+        return self.album_type or "playlist"
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,11 +218,13 @@ class SoundCloudDownloader:
                 )
             if not tracks:
                 raise DownloadError("В плейлисте нет доступных для скачивания треков.")
+            album_type = str(info.get("album_type") or "").strip().lower() or None
             return ProbeResult(
                 title=str(info.get("title") or "Плейлист"),
                 is_playlist=True,
                 tracks=tuple(tracks),
                 total=len(tracks),
+                album_type=album_type,
             )
 
         return ProbeResult(

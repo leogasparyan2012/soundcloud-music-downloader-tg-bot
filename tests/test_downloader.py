@@ -4,7 +4,24 @@ from __future__ import annotations
 
 import pytest
 
-from soundcloud_bot.downloader import SoundCloudDownloader
+from soundcloud_bot.downloader import ProbeResult, SoundCloudDownloader
+
+
+@pytest.mark.parametrize(
+    ("is_playlist", "album_type", "kind"),
+    [
+        (False, None, "track"),
+        (True, None, "playlist"),
+        (True, "playlist", "playlist"),
+        (True, "album", "album"),
+        (True, "ep", "ep"),
+        (True, "single", "single"),
+        (True, "compilation", "compilation"),
+    ],
+)
+def test_probe_result_kind(is_playlist: bool, album_type: str | None, kind: str) -> None:
+    probe = ProbeResult("x", is_playlist, (), 1, album_type=album_type)
+    assert probe.kind == kind
 
 
 def test_hook_reports_real_metadata_once() -> None:
